@@ -1,0 +1,177 @@
+# Description: Model Server
+
+package(
+    default_visibility = [
+        "//tensorflow_serving:internal",
+    ],
+    features = ["-layering_check"],
+)
+
+licenses(["notice"])  # Apache 2.0
+
+exports_files(["LICENSE"])
+
+filegroup(
+    name = "all_files",
+    srcs = glob(
+        ["**/*"],
+        exclude = [
+            "**/METADATA",
+            "**/OWNERS",
+        ],
+    ),
+)
+
+cc_library(
+    name = "model_platform_types",
+    hdrs = ["model_platform_types.h"],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+SUPPORTED_TENSORFLOW_OPS = [
+    "@org_tensorflow//tensorflow/contrib:contrib_kernels",
+    "@org_tensorflow//tensorflow/contrib:contrib_ops_op_lib",
+]
+
+cc_library(
+    name = "model_platform_tensorflow",
+    hdrs = ["model_platform_tensorflow.h"],
+    deps = [
+        "@org_tensorflow//tensorflow/core:tensorflow",
+        "//tensorflow_serving/servables/tensorflow:session_bundle_source_adapter",
+        "//tensorflow_serving/servables/tensorflow:predict_impl"
+    ] + SUPPORTED_TENSORFLOW_OPS,
+    defines = ["USE_TENSORFLOW"],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+cc_library(
+    name = "model_platform_caffe",
+    hdrs = ["model_platform_caffe.h"],
+    deps = [
+        "//tensorflow_serving/servables/caffe:predict_impl",
+        "//tensorflow_serving/servables/caffe:caffe_source_adapter",
+        "//tensorflow_serving/servables/caffe:caffe_source_adapter_proto",
+    ],
+    defines = ["USE_CAFFE"],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+cc_library(
+    name = "server_core",
+    srcs = ["server_core.cc"],
+    hdrs = ["server_core.h"],
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        ":model_platform_types",
+        "//tensorflow_serving/apis:model_proto",
+        "//tensorflow_serving/config:model_server_config_proto",
+        "//tensorflow_serving/core:aspired_versions_manager",
+        "//tensorflow_serving/core:load_servables_fast",
+        "//tensorflow_serving/core:servable_state_monitor",
+        "//tensorflow_serving/core:source",
+        "//tensorflow_serving/core:source_adapter",
+        "//tensorflow_serving/core:storage_path",
+        "//tensorflow_serving/resources:resource_values",
+        "//tensorflow_serving/servables/tensorflow:session_bundle_source_adapter",
+        "//tensorflow_serving/servables/tensorflow:session_bundle_source_adapter_proto",
+        "//tensorflow_serving/sources/storage_path:file_system_storage_path_source",
+        "//tensorflow_serving/sources/storage_path:file_system_storage_path_source_proto",
+        "//tensorflow_serving/util:event_bus",
+        "//tensorflow_serving/util:unique_ptr_with_deps",
+        "@org_tensorflow//tensorflow/core:lib",
+        "@protobuf//:cc_wkt_protos",
+    ],
+)
+
+cc_test(
+    name = "server_core_test",
+    size = "medium",
+    srcs = ["server_core_test.cc"],
+    data = [
+        "//tensorflow_serving/servables/tensorflow/testdata:half_plus_two/00000123/export",
+        "//tensorflow_serving/servables/tensorflow/testdata:half_plus_two/00000123/export.meta",
+    ],
+    deps = [
+        ":server_core",
+        "//tensorflow_serving/apis:model_proto",
+        "//tensorflow_serving/core:servable_handle",
+        "//tensorflow_serving/core:servable_state",
+        "//tensorflow_serving/core/test_util:availability_test_util",
+        "//tensorflow_serving/core/test_util:test_main",
+        "//tensorflow_serving/model_servers/test_util:server_core_test_util",
+        "//tensorflow_serving/test_util",
+        "@org_tensorflow//tensorflow/core:test",
+    ],
+)
+
+SERVER_DEPS = [
+    ":model_platform_types",
+    ":server_core",
+    "@protobuf//:cc_wkt_protos",
+    "@org_tensorflow//tensorflow/core:lib",
+    "@org_tensorflow//tensorflow/core/platform/cloud:gcs_file_system",
+    "//tensorflow_serving/apis:prediction_service_proto",
+    "//tensorflow_serving/config:model_server_config_proto",
+    "//tensorflow_serving/core:eager_load_policy",
+    "@grpc//:grpc++",
+]
+
+# tensorflow-only model server
+cc_binary(
+    name = "tensorflow_model_server",
+    srcs = ["main.cc"],
+    visibility = ["//tensorflow_serving:internal"],
+    deps = SERVER_DEPS + [
+        ":model_platform_tensorflow"
+    ]
+)
+
+# generic caffe + tensorflow model server
+cc_binary(
+    name = "model_server",
+    srcs = ["main.cc"],
+    visibility = ["//tensorflow_serving:internal"],
+    deps = SERVER_DEPS + [
+        ":model_platform_tensorflow",
+        ":model_platform_caffe"
+    ]
+)
+
+py_test(
+    name = "tensorflow_model_server_test",
+    size = "large",
+    srcs = ["tensorflow_model_server_test.py"],
+    data = [
+        ":tensorflow_model_server",
+        "//tensorflow_serving/servables/tensorflow/testdata:bad_half_plus_two/00000123/export",
+        "//tensorflow_serving/servables/tensorflow/testdata:bad_half_plus_two/00000123/export.meta",
+        "//tensorflow_serving/servables/tensorflow/testdata:half_plus_two/00000123/export",
+        "//tensorflow_serving/servables/tensorflow/testdata:half_plus_two/00000123/export.meta",
+    ],
+    tags = [
+        "local",
+        "manual",
+    ],
+    deps = [
+        "//tensorflow_serving/apis:prediction_service_proto_py_pb2",
+        "@org_tensorflow//tensorflow:tensorflow_py",
+    ],
+)
+
+py_binary(
+    name = "tensorflow_model_server_test_client",
+    srcs = ["tensorflow_model_server_test_client.py"],
+    deps = [
+        "//tensorflow_serving/apis:prediction_service_proto_py_pb2",
+        "@org_tensorflow//tensorflow:tensorflow_py",
+    ],
+)

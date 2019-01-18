@@ -1,0 +1,45 @@
+// Protobuf definition of obj_detector
+// localisation and classification server.
+
+syntax = "proto3";
+
+package tensorflow.serving;
+
+message Detection {
+    // bounding box of the object in pixel-space coordinates
+    int32 roi_x1 = 1;
+    int32 roi_x2 = 2;
+    int32 roi_y1 = 3;
+    int32 roi_y2 = 4;
+
+    // class label for this detection
+    string class_label = 5;
+
+    // score for this detection
+    float score = 6;
+};
+
+message DetectRequest {
+    // input planar image with shape [c = 3, h, w] and BGR channel order
+    bytes image_data = 1;
+
+    // minimum score permitted for classification
+    float min_score_threshold = 2;
+};
+
+message DetectResponse {
+    repeated Detection detections = 1;
+};
+
+message ConfigurationRequest {
+};
+
+message DetectConfiguration {
+    // input image shape, [c, h, w]
+    repeated int32 input_image_shape = 1;
+};
+
+service DetectService {
+    rpc GetConfiguration(ConfigurationRequest) returns (DetectConfiguration);
+    rpc Detect(DetectRequest) returns (DetectResponse);
+};
